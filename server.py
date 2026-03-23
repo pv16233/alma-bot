@@ -68,6 +68,7 @@ def build_catalog_text(catalog: dict) -> str:
 
 # ── Historial de ventas ───────────────────────────────────────────────────────
 ventas_hoy: list = []
+cancelaciones_pendientes: dict = {}  # numero -> ultima venta a cancelar
 CSV_PATH = Path(__file__).parent / "ventas.csv"
 
 def guardar_venta(venta: dict):
@@ -84,6 +85,34 @@ def guardar_venta(venta: dict):
         row = {k: venta[k] for k in ["fecha","vendedora","articulo","nombre_producto",
                                       "cantidad","precio_unitario","medio_pago","total","notas"]}
         writer.writerow(row)
+
+def cancelar_ultima_venta(vendedora_num: str) -> tuple:
+    """Devuelve (venta, indice) de la última venta de este número, o (None, -1)"""
+    if not CSV_PATH.exists():
+        return None, -1
+    with open(CSV_PATH, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+    if len(lines) <= 1:
+        return None, -1
+    # Buscar última venta de esta vendedora leyendo de atrás para adelante
+    for i in range(len(lines)-1, 0, -1):
+        parts = lines[i].strip().split(',')
+        if len(parts) >= 2 and vendedora_num in parts[1]:
+            return lines[i].strip(), i
+    # Si no hay coincidencia por número, devolver la última línea
+    return lines[-1].strip(), len(lines)-1
+
+def borrar_venta_csv(indice: int):
+    """Borra la línea del CSV en el índice dado."""
+    with open(CSV_PATH, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+    if 0 < indice < len(lines):
+        lines.pop(indice)
+        with open(CSV_PATH, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        # También borrar de ventas_hoy si está
+        if ventas_hoy:
+            ventas_hoy.pop()
 
 # ── Interpretar venta con Claude ──────────────────────────────────────────────
 def interpretar_venta(texto: str, catalog: dict) -> dict:
@@ -225,6 +254,41 @@ def webhook():
         return Response(str(resp), mimetype="text/xml")
     if not vendedora:
         vendedora = "Dueño"
+
+    # ── Manejo de cancelaciones ──────────────────────────────────────────
+    body_lower = body.lower().strip()
+    if body_lower in ["cancelar", "cancelar venta", "cancel"]:
+        venta_line, idx = cancelar_ultima_venta(numero_limpio)
+        if venta_line and idx > 0:
+            # Parsear la línea para mostrarla amigable
+            parts = venta_line.split(',')
+            try:
+                resumen_venta = f"📋 Última venta registrada:
+• {parts[3]} x{parts[4]} = ${int(parts[7]):,} ({parts[6]})
+Fecha: {parts[0]}"
+            except:
+                resumen_venta = f"📋 Última venta:
+{venta_line}"
+            cancelaciones_pendientes[numero_limpio] = idx
+            enviar_whatsapp(from_number, f"{resumen_venta}
+
+¿Confirmás la cancelación? Respondé *sí* para borrarla o *no* para mantenerla.")
+        else:
+            enviar_whatsapp(from_number, "⚠️ No encontré ventas para cancelar.")
+        return Response("<Response/>", mimetype="text/xml")
+
+    if body_lower in ["sí", "si", "sí cancelar", "confirmar"] and numero_limpio in cancelaciones_pendientes:
+        idx = cancelaciones_pendientes.pop(numero_limpio)
+        borrar_venta_csv(idx)
+        enviar_whatsapp(from_number, "✅ Venta cancelada correctamente.")
+        if not is_owner:
+            enviar_whatsapp(OWNER_WHATSAPP, f"🗑️ *{vendedora or 'Vendedora'}* canceló una venta.")
+        return Response("<Response/>", mimetype="text/xml")
+
+    if body_lower == "no" and numero_limpio in cancelaciones_pendientes:
+        cancelaciones_pendientes.pop(numero_limpio)
+        enviar_whatsapp(from_number, "👍 La venta se mantiene.")
+        return Response("<Response/>", mimetype="text/xml")
 
     texto = body
     if num_media > 0 and "audio" in media_type:
