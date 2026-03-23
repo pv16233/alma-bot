@@ -234,11 +234,11 @@ def webhook():
             with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
                 tmp.write(r.content)
                 tmp_path = tmp.name
-            import openai
-            openai_client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+            from groq import Groq
+            groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
             with open(tmp_path, "rb") as audio_file:
-                transcription = openai_client.audio.transcriptions.create(
-                    model="whisper-1",
+                transcription = groq_client.audio.transcriptions.create(
+                    model="whisper-large-v3",
                     file=audio_file,
                     language="es"
                 )
