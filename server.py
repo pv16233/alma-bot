@@ -228,16 +228,21 @@ def webhook():
         try:
             auth = (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
             r = httpx.get(media_url, auth=auth, follow_redirects=True, timeout=30)
-            audio_b64 = base64.b64encode(r.content).decode()
-            resp_audio = claude_client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=500,
-                messages=[{"role": "user", "content": [
-                    {"type": "text", "text": "Transcribí exactamente este audio. Solo la transcripción."},
-                    {"type": "document", "source": {"type": "base64", "media_type": media_type, "data": audio_b64}}
-                ]}]
-            )
-            texto = resp_audio.content[0].text.strip()
+            # Guardar audio temporalmente y transcribir con Whisper (OpenAI)
+            import tempfile
+            suffix = ".ogg" if "ogg" in media_type else ".mp4"
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                tmp.write(r.content)
+                tmp_path = tmp.name
+            import openai
+            openai_client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+            with open(tmp_path, "rb") as audio_file:
+                transcription = openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language="es"
+                )
+            texto = transcription.text.strip()
             enviar_whatsapp(from_number, f'🎤 _"{texto}"_\n\n_Procesando..._')
         except Exception as e:
             enviar_whatsapp(from_number, f"⚠️ No pude transcribir: {e}")
