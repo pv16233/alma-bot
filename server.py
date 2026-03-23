@@ -257,6 +257,21 @@ def webhook():
 
     # ── Manejo de cancelaciones ──────────────────────────────────────────
     body_lower = body.lower().strip()
+
+    # Confirmar o rechazar cancelación pendiente PRIMERO antes de cualquier otra cosa
+    if body_lower in ["sí", "si", "s"] and numero_limpio in cancelaciones_pendientes:
+        idx = cancelaciones_pendientes.pop(numero_limpio)
+        borrar_venta_csv(idx)
+        enviar_whatsapp(from_number, "✅ Venta cancelada correctamente.")
+        if OWNER_WHATSAPP and from_number != OWNER_WHATSAPP:
+            enviar_whatsapp(OWNER_WHATSAPP, "🗑️ Una vendedora canceló una venta.")
+        return Response("<Response/>", mimetype="text/xml")
+
+    if body_lower == "no" and numero_limpio in cancelaciones_pendientes:
+        cancelaciones_pendientes.pop(numero_limpio)
+        enviar_whatsapp(from_number, "👍 La venta se mantiene.")
+        return Response("<Response/>", mimetype="text/xml")
+
     if body_lower in ["cancelar", "cancelar venta", "cancel"]:
         venta_line, idx = cancelar_ultima_venta(numero_limpio)
         if venta_line and idx > 0:
@@ -271,19 +286,6 @@ def webhook():
             enviar_whatsapp(from_number, msg)
         else:
             enviar_whatsapp(from_number, "⚠️ No encontré ventas para cancelar.")
-        return Response("<Response/>", mimetype="text/xml")
-
-    if body_lower in ["sí", "si", "sí cancelar", "confirmar"] and numero_limpio in cancelaciones_pendientes:
-        idx = cancelaciones_pendientes.pop(numero_limpio)
-        borrar_venta_csv(idx)
-        enviar_whatsapp(from_number, "✅ Venta cancelada correctamente.")
-        if not is_owner:
-            enviar_whatsapp(OWNER_WHATSAPP, f"🗑️ *{vendedora or 'Vendedora'}* canceló una venta.")
-        return Response("<Response/>", mimetype="text/xml")
-
-    if body_lower == "no" and numero_limpio in cancelaciones_pendientes:
-        cancelaciones_pendientes.pop(numero_limpio)
-        enviar_whatsapp(from_number, "👍 La venta se mantiene.")
         return Response("<Response/>", mimetype="text/xml")
 
     texto = body
