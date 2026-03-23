@@ -263,16 +263,12 @@ def webhook():
             # Parsear la línea para mostrarla amigable
             parts = venta_line.split(',')
             try:
-                resumen_venta = f"📋 Última venta registrada:
-• {parts[3]} x{parts[4]} = ${int(parts[7]):,} ({parts[6]})
-Fecha: {parts[0]}"
+                resumen_venta = "📋 Última venta registrada:\n• " + parts[3] + " x" + parts[4] + " = $" + str(parts[7]) + " (" + parts[6] + ")\nFecha: " + parts[0]
             except:
-                resumen_venta = f"📋 Última venta:
-{venta_line}"
+                resumen_venta = "📋 Última venta:\n" + venta_line
             cancelaciones_pendientes[numero_limpio] = idx
-            enviar_whatsapp(from_number, f"{resumen_venta}
-
-¿Confirmás la cancelación? Respondé *sí* para borrarla o *no* para mantenerla.")
+            msg = resumen_venta + "\n\n¿Confirmás la cancelación? Respondé *sí* para borrarla o *no* para mantenerla."
+            enviar_whatsapp(from_number, msg)
         else:
             enviar_whatsapp(from_number, "⚠️ No encontré ventas para cancelar.")
         return Response("<Response/>", mimetype="text/xml")
