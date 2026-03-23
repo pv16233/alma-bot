@@ -75,12 +75,15 @@ def guardar_venta(venta: dict):
     file_exists = CSV_PATH.exists()
     with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
-            "fecha","hora","vendedora","articulo","nombre_producto",
+            "fecha","vendedora","articulo","nombre_producto",
             "cantidad","precio_unitario","medio_pago","total","notas"
         ])
         if not file_exists:
             writer.writeheader()
-        writer.writerow(venta)
+        # Write without hora
+        row = {k: venta[k] for k in ["fecha","vendedora","articulo","nombre_producto",
+                                      "cantidad","precio_unitario","medio_pago","total","notas"]}
+        writer.writerow(row)
 
 # ── Interpretar venta con Claude ──────────────────────────────────────────────
 def interpretar_venta(texto: str, catalog: dict) -> dict:
@@ -262,7 +265,7 @@ def webhook():
     ahora = datetime.datetime.now()
     for v in resultado.get("ventas", []):
         guardar_venta({
-            "fecha": ahora.strftime("%d/%m/%Y"), "hora": ahora.strftime("%H:%M"),
+            "fecha": ahora.strftime("%d/%m/%Y"),
             "vendedora": vendedora, "articulo": v.get("articulo", ""),
             "nombre_producto": v.get("nombre_producto", ""),
             "cantidad": v.get("cantidad", 1), "precio_unitario": v.get("precio_unitario", 0),
