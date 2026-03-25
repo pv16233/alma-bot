@@ -68,7 +68,26 @@ def build_catalog_text(catalog: dict) -> str:
 
 # ── Historial de ventas ───────────────────────────────────────────────────────
 ventas_hoy: list = []
-cancelaciones_pendientes: dict = {}  # numero -> ultima venta a cancelar
+CANCELACIONES_PATH = Path(__file__).parent / "cancelaciones.json"
+
+def get_cancelaciones() -> dict:
+    if CANCELACIONES_PATH.exists():
+        try:
+            return json.loads(CANCELACIONES_PATH.read_text())
+        except:
+            return {}
+    return {}
+
+def set_cancelacion(numero: str, idx: int):
+    c = get_cancelaciones()
+    c[numero] = idx
+    CANCELACIONES_PATH.write_text(json.dumps(c))
+
+def pop_cancelacion(numero: str) -> int:
+    c = get_cancelaciones()
+    idx = c.pop(numero, -1)
+    CANCELACIONES_PATH.write_text(json.dumps(c))
+    return idx
 CSV_PATH = Path(__file__).parent / "ventas.csv"
 
 def guardar_venta(venta: dict):
@@ -259,16 +278,16 @@ def webhook():
     body_lower = body.lower().strip()
 
     # Confirmar o rechazar cancelación pendiente PRIMERO antes de cualquier otra cosa
-    if body_lower in ["sí", "si", "s"] and numero_limpio in cancelaciones_pendientes:
-        idx = cancelaciones_pendientes.pop(numero_limpio)
+    if body_lower in ["sí", "si", "s"] and numero_limpio in get_cancelaciones():
+        idx = pop_cancelacion(numero_limpio)
         borrar_venta_csv(idx)
         enviar_whatsapp(from_number, "✅ Venta cancelada correctamente.")
         if OWNER_WHATSAPP and from_number != OWNER_WHATSAPP:
             enviar_whatsapp(OWNER_WHATSAPP, "🗑️ Una vendedora canceló una venta.")
         return Response("<Response/>", mimetype="text/xml")
 
-    if body_lower == "no" and numero_limpio in cancelaciones_pendientes:
-        cancelaciones_pendientes.pop(numero_limpio)
+    if body_lower == "no" and numero_limpio in get_cancelaciones():
+        pop_cancelacion(numero_limpio)
         enviar_whatsapp(from_number, "👍 La venta se mantiene.")
         return Response("<Response/>", mimetype="text/xml")
 
@@ -281,7 +300,7 @@ def webhook():
                 resumen_venta = "📋 Última venta registrada:\n• " + parts[3] + " x" + parts[4] + " = $" + str(parts[7]) + " (" + parts[6] + ")\nFecha: " + parts[0]
             except:
                 resumen_venta = "📋 Última venta:\n" + venta_line
-            cancelaciones_pendientes[numero_limpio] = idx
+            set_cancelacion(numero_limpio, idx)
             msg = resumen_venta + "\n\n¿Confirmás la cancelación? Respondé *sí* para borrarla o *no* para mantenerla."
             enviar_whatsapp(from_number, msg)
         else:
