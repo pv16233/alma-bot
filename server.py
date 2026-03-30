@@ -356,6 +356,14 @@ def webhook():
         })
 
     enviar_whatsapp(from_number, fmt_confirmacion(resultado, vendedora))
+
+    # Avisar si algún producto no tiene costo cargado
+    sin_costo = [v for v in resultado.get("ventas", []) if v.get("costo_unitario", 0) == 0]
+    if sin_costo:
+        nombres = ", ".join(v["nombre_producto"] for v in sin_costo)
+        aviso = "⚠️ *Atención:* los siguientes productos no tienen costo cargado:\n" + nombres + "\nNo se pudo calcular el monto al artesano."
+        enviar_whatsapp(OWNER_WHATSAPP, aviso)
+
     if not is_owner:
         enviar_whatsapp(OWNER_WHATSAPP, fmt_para_dueno(resultado, vendedora, ahora.strftime("%H:%M")))
 
